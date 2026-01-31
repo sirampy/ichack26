@@ -341,6 +341,39 @@ def sample_shape_evenly(points: List[Tuple[float, float]], num_samples: int) -> 
     return sampled
 
 
+def calculate_straightness(points: List[Tuple[float, float]]) -> float:
+    """
+    Calculate how straight a path is.
+    Returns ratio of max perpendicular distance to total path length.
+    Lower values = straighter path. < 0.15 is very straight.
+    """
+    if len(points) < 3:
+        return 0.0
+
+    # Line from first to last point
+    x1, y1 = points[0]
+    x2, y2 = points[-1]
+
+    line_length = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+    if line_length == 0:
+        return 0.0
+
+    # Calculate max perpendicular distance from any point to the line
+    max_perp_dist = 0
+    for x, y in points[1:-1]:
+        # Perpendicular distance from point to line
+        # Using formula: |ax + by + c| / sqrt(a^2 + b^2)
+        a = y2 - y1
+        b = x1 - x2
+        c = x2 * y1 - x1 * y2
+
+        perp_dist = abs(a * x + b * y + c) / math.sqrt(a * a + b * b)
+        max_perp_dist = max(max_perp_dist, perp_dist)
+
+    # Return ratio: max deviation / line length
+    return max_perp_dist / line_length
+
+
 def transform_user_shape_to_geo(canvas_shape: List[Dict], start_lat: float,
                                  start_lng: float, target_distance_m: float) -> List[Tuple[float, float]]:
     """
@@ -361,9 +394,24 @@ def transform_user_shape_to_geo(canvas_shape: List[Dict], start_lat: float,
     # Extract x, y coordinates
     points = [(p['x'], p['y']) for p in canvas_shape]
 
-    # Sample evenly along the path (12-20 waypoints depending on complexity)
-    # More waypoints = better shape matching but slower route generation
-    num_waypoints = min(20, max(12, len(points) // 8))
+    # Detect if path is nearly straight
+    straightness = calculate_straightness(points)
+
+    # For straight paths, use fewer waypoints to avoid zigzagging
+    # For complex shapes, use more waypoints for better matching
+    if straightness < 0.05:
+        # Nearly perfect straight line - just start and end
+        num_waypoints = 3
+        print(f"  Detected very straight path (straightness={straightness:.3f}), using {num_waypoints} waypoints")
+    elif straightness < 0.15:
+        # Somewhat straight - use minimal waypoints
+        num_waypoints = 5
+        print(f"  Detected straight path (straightness={straightness:.3f}), using {num_waypoints} waypoints")
+    else:
+        # Complex shape - use more waypoints for accurate matching
+        num_waypoints = min(20, max(12, len(points) // 8))
+        print(f"  Complex shape (straightness={straightness:.3f}), using {num_waypoints} waypoints")
+
     sampled_points = sample_shape_evenly(points, num_waypoints)
 
     print(f"  Shape transform: {len(points)} raw points → {len(sampled_points)} waypoints")
