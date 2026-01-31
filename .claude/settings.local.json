@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python test_route_generation_debug.py:*)",
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}
