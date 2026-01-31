@@ -9,6 +9,7 @@ import random
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 import heapq
+import numpy as np
 
 
 class RouteGraph:
@@ -233,12 +234,309 @@ class RouteGraph:
         return math.sqrt(dlat**2 + dlng**2)
 
 
+def frechet_distance(route_coords: List[Tuple[float, float]],
+                     shape_coords: List[Tuple[float, float]]) -> float:
+    """
+    Calculate discrete Fréchet distance between route and target shape.
+    Lower is better (routes match shape more closely).
+    """
+    n = len(route_coords)
+    m = len(shape_coords)
+
+    # Dynamic programming matrix
+    dp = np.full((n, m), -1.0)
+
+    def distance(p1, p2):
+        """Euclidean distance between two lat/lng points (approximate)"""
+        dlat = (p1[0] - p2[0]) * 111320
+        dlng = (p1[1] - p2[1]) * 111320 * math.cos(math.radians((p1[0] + p2[0]) / 2))
+        return math.sqrt(dlat**2 + dlng**2)
+
+    def compute(i, j):
+        if dp[i][j] > -0.5:
+            return dp[i][j]
+
+        dist = distance(route_coords[i], shape_coords[j])
+
+        if i == 0 and j == 0:
+            dp[i][j] = dist
+        elif i == 0:
+            dp[i][j] = max(dist, compute(0, j - 1))
+        elif j == 0:
+            dp[i][j] = max(dist, compute(i - 1, 0))
+        else:
+            dp[i][j] = max(dist, min(compute(i - 1, j), compute(i, j - 1), compute(i - 1, j - 1)))
+
+        return dp[i][j]
+
+    return compute(n - 1, m - 1)
+
+
+def generate_reference_circle(center_lat: float, center_lng: float,
+                               radius_m: float, num_points: int = 36) -> List[Tuple[float, float]]:
+    """
+    Generate a reference circular shape for shape matching.
+    Returns list of (lat, lng) tuples forming a circle.
+    """
+    points = []
+    for i in range(num_points):
+        angle = (2 * math.pi * i) / num_points
+
+        lat_offset = (radius_m / 111320) * math.cos(angle)
+        lng_offset = (radius_m / (111320 * math.cos(math.radians(center_lat)))) * math.sin(angle)
+
+        points.append((center_lat + lat_offset, center_lng + lng_offset))
+
+    return points
+
+
+def sample_shape_evenly(points: List[Tuple[float, float]], num_samples: int) -> List[Tuple[float, float]]:
+    """
+    Sample points evenly along a path by distance.
+
+    Args:
+        points: List of (x, y) points forming a path
+        num_samples: Number of points to sample
+
+    Returns:
+        List of evenly spaced points along the path
+    """
+    if len(points) < 2:
+        return points
+
+    # Calculate cumulative distances
+    distances = [0]
+    for i in range(len(points) - 1):
+        dx = points[i+1][0] - points[i][0]
+        dy = points[i+1][1] - points[i][1]
+        dist = math.sqrt(dx*dx + dy*dy)
+        distances.append(distances[-1] + dist)
+
+    total_distance = distances[-1]
+    if total_distance == 0:
+        return points[:num_samples]
+
+    # Sample at even intervals
+    sampled = []
+    for i in range(num_samples):
+        target_dist = (total_distance * i) / num_samples
+
+        # Find segment containing this distance
+        for j in range(len(distances) - 1):
+            if distances[j] <= target_dist <= distances[j+1]:
+                # Interpolate within this segment
+                segment_start = distances[j]
+                segment_end = distances[j+1]
+                segment_length = segment_end - segment_start
+
+                if segment_length > 0:
+                    t = (target_dist - segment_start) / segment_length
+                    x = points[j][0] + t * (points[j+1][0] - points[j][0])
+                    y = points[j][1] + t * (points[j+1][1] - points[j][1])
+                    sampled.append((x, y))
+                else:
+                    sampled.append(points[j])
+                break
+
+    return sampled
+
+
+def transform_user_shape_to_geo(canvas_shape: List[Dict], start_lat: float,
+                                 start_lng: float, target_distance_m: float) -> List[Tuple[float, float]]:
+    """
+    Convert user's drawn shape from canvas coordinates to geographic coordinates.
+    Samples evenly spaced waypoints along the path.
+
+    Args:
+        canvas_shape: List of {'x': float, 'y': float} from user's drawing
+        start_lat, start_lng: Center point for the shape
+        target_distance_m: Desired route distance (used for scaling)
+
+    Returns:
+        List of (lat, lng) tuples (evenly sampled waypoints)
+    """
+    if not canvas_shape or len(canvas_shape) < 3:
+        raise ValueError("Shape must have at least 3 points")
+
+    # Extract x, y coordinates
+    points = [(p['x'], p['y']) for p in canvas_shape]
+
+    # Sample evenly along the path (12-20 waypoints depending on complexity)
+    # More waypoints = better shape matching but slower route generation
+    num_waypoints = min(20, max(12, len(points) // 8))
+    sampled_points = sample_shape_evenly(points, num_waypoints)
+
+    print(f"  Shape transform: {len(points)} raw points → {len(sampled_points)} waypoints")
+
+    # Calculate perimeter of sampled shape
+    drawn_perimeter = sum(
+        math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+        for p1, p2 in zip(sampled_points, sampled_points[1:] + [sampled_points[0]])
+    )
+
+    if drawn_perimeter == 0:
+        raise ValueError("Shape has zero perimeter")
+
+    # Scale factor: target distance / drawn perimeter / detour factor
+    # Detour factor accounts for roads being longer than straight lines
+    detour_factor = 1.7
+    scale_meters_per_pixel = target_distance_m / drawn_perimeter / detour_factor
+
+    print(f"  Drawn perimeter: {drawn_perimeter:.1f}px, scale: {scale_meters_per_pixel:.2f} m/px")
+
+    # Center the shape at origin
+    center_x = sum(p[0] for p in sampled_points) / len(sampled_points)
+    center_y = sum(p[1] for p in sampled_points) / len(sampled_points)
+    centered = [(x - center_x, y - center_y) for x, y in sampled_points]
+
+    # Convert to lat/lng offsets
+    geo_points = []
+    for x, y in centered:
+        # Canvas: y increases downward, but we want north to be up
+        # So flip y axis
+        y_flipped = -y
+
+        # Convert pixels to meters, then to lat/lng
+        meters_x = x * scale_meters_per_pixel
+        meters_y = y_flipped * scale_meters_per_pixel
+
+        lat_offset = meters_y / 111320
+        lng_offset = meters_x / (111320 * math.cos(math.radians(start_lat)))
+
+        geo_points.append((start_lat + lat_offset, start_lng + lng_offset))
+
+    return geo_points
+
+
 class RouteGenerator:
     """Generate actual routes from OSM way segments"""
 
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.graph = RouteGraph(db_path)
+
+    def generate_shape_matched_loop(
+        self,
+        start_lat: float,
+        start_lng: float,
+        target_shape: List[Tuple[float, float]],
+        target_distance_m: float,
+        tolerance: float = 0.15,
+        num_candidates: int = 3
+    ) -> Optional[Dict]:
+        """
+        Generate routes that follow a target shape.
+        Uses the shape waypoints directly to create the route.
+
+        Args:
+            start_lat, start_lng: Starting location
+            target_shape: List of (lat, lng) tuples defining desired shape
+            target_distance_m: Desired distance
+            tolerance: Distance tolerance
+            num_candidates: Number of route variations to try
+
+        Returns:
+            Best matching route or None
+        """
+        print(f"\nGenerating shape-matched {target_distance_m}m loop")
+        print(f"  Target shape has {len(target_shape)} points")
+
+        # Calculate search radius based on shape extent
+        lats = [p[0] for p in target_shape]
+        lngs = [p[1] for p in target_shape]
+        lat_range = max(lats) - min(lats)
+        lng_range = max(lngs) - min(lngs)
+
+        # Approximate radius in meters
+        shape_extent_m = max(
+            lat_range * 111320,
+            lng_range * 111320 * math.cos(math.radians(start_lat))
+        )
+        search_radius = min(max(1.5, shape_extent_m / 1000 * 1.5), 5.0)
+
+        print(f"  Shape extent: {shape_extent_m:.0f}m, search radius: {search_radius:.1f}km")
+
+        # Build graph
+        if not self.graph.build_graph(start_lat, start_lng, search_radius):
+            print("  Failed to build graph")
+            return None
+
+        # Find nearest graph nodes to each shape waypoint
+        waypoint_nodes = []
+        for wp_lat, wp_lng in target_shape:
+            node = self.graph.find_nearest_node(wp_lat, wp_lng, min_degree=1)
+            if node is None:
+                print(f"  Failed to find node near waypoint ({wp_lat:.5f}, {wp_lng:.5f})")
+                return None
+            waypoint_nodes.append(node)
+
+        # Check if shape is closed or open
+        # If start and end are close, it's a closed loop
+        # If far apart, it's an open path (line) - create out-and-back
+        start_point = target_shape[0]
+        end_point = target_shape[-1]
+        distance_to_close = self.graph._distance(
+            start_point[0], start_point[1], end_point[0], end_point[1]
+        )
+
+        # Calculate average spacing between waypoints to determine threshold
+        avg_spacing = sum(
+            self.graph._distance(target_shape[i][0], target_shape[i][1],
+                               target_shape[i+1][0], target_shape[i+1][1])
+            for i in range(len(target_shape) - 1)
+        ) / (len(target_shape) - 1)
+
+        is_closed = distance_to_close < avg_spacing * 2  # Close if within 2x average spacing
+
+        if is_closed:
+            # Closed loop: connect back to start
+            waypoint_nodes.append(waypoint_nodes[0])
+            print(f"  Found graph nodes for all {len(target_shape)} waypoints (closed loop)")
+        else:
+            # Open path: Point A to Point B - NO RETURN!
+            print(f"  Found graph nodes for all {len(target_shape)} waypoints (open path: point-to-point)")
+            print(f"  Route will start at one end and finish at the other")
+
+        # Connect consecutive waypoints via shortest paths
+        all_way_tuples = []
+        total_distance = 0
+
+        for i in range(len(waypoint_nodes) - 1):
+            from_node = waypoint_nodes[i]
+            to_node = waypoint_nodes[i + 1]
+
+            # Find shortest path between waypoints
+            path = self._shortest_path(from_node, to_node, set())
+
+            if path is None:
+                print(f"  Failed to connect waypoint {i} to {i+1}")
+                return None
+
+            all_way_tuples.extend(path['ways'])
+            total_distance += path['distance']
+
+        # Check distance tolerance
+        min_dist = target_distance_m * (1 - tolerance)
+        max_dist = target_distance_m * (1 + tolerance)
+
+        print(f"  Generated route: {total_distance:.0f}m (target: {target_distance_m:.0f}m)")
+
+        if not (min_dist <= total_distance <= max_dist):
+            print(f"  ⚠ Distance {total_distance:.0f}m outside tolerance ({min_dist:.0f}-{max_dist:.0f}m)")
+            # Don't fail - accept it anyway since shape is more important
+            # return None
+
+        # Build route coordinates
+        route_coords = self._build_route_coords(all_way_tuples)
+
+        print(f"  ✓ Generated shape-matched route: {total_distance:.0f}m, {len(route_coords)} coords")
+
+        return {
+            'coordinates': route_coords,
+            'distance_meters': total_distance,
+            'way_ids': [w[0] for w in all_way_tuples],
+            'num_segments': len(all_way_tuples)
+        }
 
     def generate_circular_loop(
         self,

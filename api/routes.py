@@ -63,30 +63,52 @@ def match_routes():
         print(f"Desired distance: {desired_distance_miles:.1f} miles ({target_distance_m:.0f}m)", flush=True)
         print(f"{'='*60}\n", flush=True)
 
-        # NEW: Generate actual routes using route generator
-        print("Attempting to generate routes...")
+        # Generate reference shape for matching
+        from .route_generator import generate_reference_circle, transform_user_shape_to_geo
+
+        if shape and len(shape) >= 3:
+            # User drew a shape - use it!
+            print(f"Using user-drawn shape with {len(shape)} points")
+            try:
+                reference_shape = transform_user_shape_to_geo(
+                    shape, location['lat'], location['lng'], target_distance_m
+                )
+            except Exception as e:
+                print(f"Failed to transform user shape: {e}")
+                print("Falling back to circular shape")
+                radius_m = target_distance_m / (2 * 3.14159 * 1.7)
+                reference_shape = generate_reference_circle(
+                    location['lat'], location['lng'], radius_m, num_points=36
+                )
+        else:
+            # No shape or insufficient points - use circular shape
+            print("No user shape provided, using circular shape")
+            radius_m = target_distance_m / (2 * 3.14159 * 1.7)
+            reference_shape = generate_reference_circle(
+                location['lat'], location['lng'], radius_m, num_points=36
+            )
+            print(f"Generated reference circular shape with radius {radius_m:.0f}m")
+
+        # Generate routes using shape matching
+        print("Attempting to generate shape-matched routes...")
         generated_routes = []
 
-        # Try to generate multiple route variations
-        max_attempts = 5
-
-        # Try to generate 2 routes with variation
-        for attempt in range(max_attempts):
-            # Add some variation to target distance (±10%)
-            variation = 1.0 + (attempt - 1) * 0.1  # 0.9, 1.0, 1.1
-            varied_distance = target_distance_m * variation
-
+        # Try to generate 2 routes with slightly different parameters
+        for attempt in range(2):
             try:
-                route = route_generator.generate_loop(
+                # Vary distance slightly for each attempt to get different routes
+                distance_variation = target_distance_m * (1.0 + (attempt - 0.5) * 0.1)
+
+                route = route_generator.generate_shape_matched_loop(
                     start_lat=location['lat'],
                     start_lng=location['lng'],
-                    target_distance_m=varied_distance,
-                    tolerance=0.7  # Accept ±70% to improve success rate
+                    target_shape=reference_shape,
+                    target_distance_m=distance_variation,
+                    tolerance=0.7
                 )
 
                 if route:
                     route['attempt'] = attempt
-                    route['target_distance'] = varied_distance
                     generated_routes.append(route)
                     print(f"  ✓ Generated route {len(generated_routes)}: {route['distance_meters']:.0f}m")
 

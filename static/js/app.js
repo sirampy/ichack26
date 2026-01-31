@@ -153,6 +153,42 @@ function resetDrawing() {
     updateCursor();
 }
 
+function generateCircle() {
+    // Clear existing drawing
+    resetDrawing();
+
+    // Calculate circle parameters
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = Math.min(canvas.width, canvas.height) * 0.35; // 70% of half the canvas
+
+    // Generate circle points
+    const numPoints = 36; // Smooth circle
+    currentStroke = [];
+
+    for (let i = 0; i <= numPoints; i++) {
+        const angle = (2 * Math.PI * i) / numPoints;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        currentStroke.push({ x, y });
+    }
+
+    // Draw the circle
+    ctx.beginPath();
+    ctx.moveTo(currentStroke[0].x, currentStroke[0].y);
+    for (let i = 1; i < currentStroke.length; i++) {
+        ctx.lineTo(currentStroke[i].x, currentStroke[i].y);
+    }
+    ctx.stroke();
+
+    // Mark as complete
+    hasCompletedDrawing = true;
+    checkDrawingComplete();
+    updateCursor();
+
+    console.log('Generated circle with', currentStroke.length, 'points');
+}
+
 function updateCursor() {
     if (hasCompletedDrawing) {
         canvas.style.cursor = 'pointer';  // Can click to restart
@@ -618,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Panel 1 controls
     document.getElementById('clear-canvas').addEventListener('click', clearCanvas);
     document.getElementById('undo-stroke').addEventListener('click', undoStroke);
+    document.getElementById('generate-circle').addEventListener('click', generateCircle);
     document.getElementById('use-current-location').addEventListener('click', useCurrentLocation);
 
     document.getElementById('next-to-match').addEventListener('click', async () => {
