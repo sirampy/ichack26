@@ -2,6 +2,16 @@
 
 const API_BASE = '/api';
 
+// Helper function to display location
+function getLocationDisplay(location) {
+    if (!location) return 'Unknown location';
+    if (location.name) return location.name;
+    if (location.lat && location.lng) {
+        return `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`;
+    }
+    return 'Unknown location';
+}
+
 // Load and display routes
 async function loadRoutes() {
     const grid = document.getElementById('routes-grid');
@@ -59,15 +69,9 @@ function createRouteCard(route) {
                 <div class="route-stat">
                     📏 <span class="route-stat-value">${route.distance}</span> mi
                 </div>
-                <div class="route-stat">
-                    ⏱️ <span class="route-stat-value">${route.duration}</span> min
-                </div>
-                <div class="route-stat">
-                    📈 <span class="route-stat-value">${route.elevation_gain}</span> ft
-                </div>
             </div>
             <div class="route-card-footer">
-                <span class="route-card-location">📍 ${route.location.name}</span>
+                <span class="route-card-location">📍 ${getLocationDisplay(route.location)}</span>
             </div>
         </div>
     `;

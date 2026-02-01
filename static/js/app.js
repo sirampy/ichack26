@@ -394,11 +394,9 @@ function displayRoutes(routes) {
         item.innerHTML = `
             <div class="route-item-header">
                 <span class="route-name">${route.name || `Route ${index + 1}`}</span>
-                <span class="route-match">${route.match_score || route.matchScore || '85'}% match</span>
             </div>
             <div class="route-details">
-                <span>📏 ${route.distance || '2.3'} mi</span>
-                <span>⏱️ ${route.duration || '25'} min</span>
+                <span>📏 ${route.distance} mi</span>
             </div>
         `;
 
@@ -596,19 +594,7 @@ function displaySelectedRoute() {
     container.innerHTML = `
         <div class="stat">
             <span class="stat-label">Distance</span>
-            <span class="stat-value">${route.distance || '2.3'} miles</span>
-        </div>
-        <div class="stat">
-            <span class="stat-label">Estimated Time</span>
-            <span class="stat-value">${route.duration || '25'} minutes</span>
-        </div>
-        <div class="stat">
-            <span class="stat-label">Match Score</span>
-            <span class="stat-value">${route.match_score || route.matchScore || '85'}%</span>
-        </div>
-        <div class="stat">
-            <span class="stat-label">Elevation Gain</span>
-            <span class="stat-value">${route.elevation_gain || route.elevationGain || '120'} ft</span>
+            <span class="stat-value">${route.distance} miles</span>
         </div>
     `;
 
@@ -927,10 +913,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const routeData = {
                 name: document.getElementById('route-name').value || 'My Route',
                 distance: state.selectedRoute.distance,
-                duration: state.selectedRoute.duration,
                 coordinates: state.selectedRoute.coordinates,
-                location: state.location,
-                elevation_gain: state.selectedRoute.elevation_gain
+                location: state.location
             };
 
             // Call backend API to publish route

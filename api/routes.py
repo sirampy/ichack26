@@ -8,6 +8,7 @@ import os
 import requests as http_requests
 import uuid
 from datetime import datetime
+import time
 
 # Initialize database connection
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'routes.db')
@@ -19,6 +20,48 @@ OSRM_BASE_URL = os.getenv('OSRM_BASE_URL', 'http://localhost:5050')
 
 # In-memory route storage
 PUBLISHED_ROUTES = {}
+
+
+def reverse_geocode(lat, lng):
+    """
+    Get location name from coordinates using Nominatim (OpenStreetMap).
+    Returns neighborhood/suburb or city name.
+    """
+    try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': lat,
+            'lon': lng,
+            'format': 'json',
+            'zoom': 14  # Neighborhood level
+        }
+        headers = {
+            'User-Agent': 'RouteMatcherApp/1.0'
+        }
+
+        response = http_requests.get(url, params=params, headers=headers, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            address = data.get('address', {})
+
+            # Try to get neighborhood, suburb, or city
+            location_name = (
+                address.get('neighbourhood') or
+                address.get('suburb') or
+                address.get('village') or
+                address.get('town') or
+                address.get('city') or
+                address.get('county')
+            )
+
+            if location_name:
+                return location_name
+
+        return None
+    except Exception as e:
+        print(f"Reverse geocoding failed: {e}")
+        return None
 
 
 @api_bp.route('/health')
@@ -149,7 +192,6 @@ def match_routes():
         # Extract the route (first route)
         route = osrm_data['routes'][0]
         distance_m = route['distance']
-        duration_s = route['duration']
 
         # Get coordinates from the geometry
         if 'geometry' in route and 'coordinates' in route['geometry']:
@@ -173,9 +215,6 @@ def match_routes():
             'id': 'osrm_route',
             'name': 'Your Generated Route',
             'distance': round(distance_m / 1609.34, 2),  # meters to miles
-            'duration': int(duration_s / 60),  # seconds to minutes
-            'match_score': 100,  # Route API always finds a valid route
-            'elevation_gain': 0,
             'coordinates': route_coords,
             'type': 'osrm'
         }
@@ -349,15 +388,25 @@ def publish_route():
         # Generate unique ID
         route_id = str(uuid.uuid4())[:8]
 
+        # Enrich location with name via reverse geocoding
+        location = data.get('location', {})
+        if location and not location.get('name'):
+            lat = location.get('lat')
+            lng = location.get('lng')
+            if lat and lng:
+                location_name = reverse_geocode(lat, lng)
+                if location_name:
+                    location['name'] = location_name
+                    print(f"Reverse geocoded location: {location_name}")
+                time.sleep(1)  # Respect Nominatim rate limit
+
         # Store route
         PUBLISHED_ROUTES[route_id] = {
             'id': route_id,
             'name': data.get('name', 'Unnamed Route'),
             'distance': data.get('distance', 0),
-            'duration': data.get('duration', 0),
             'coordinates': data['coordinates'],
-            'location': data.get('location', {}),
-            'elevation_gain': data.get('elevation_gain', 0),
+            'location': location,
             'created_at': datetime.utcnow().isoformat(),
             'author': 'anonymous'
         }

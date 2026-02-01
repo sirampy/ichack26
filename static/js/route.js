@@ -22,9 +22,17 @@ async function loadRoute() {
         // Update page with route data
         document.getElementById('route-name').textContent = route.name;
         document.getElementById('route-distance').textContent = `${route.distance} miles`;
-        document.getElementById('route-duration').textContent = `${route.duration} min`;
-        document.getElementById('route-elevation').textContent = `${route.elevation_gain} ft`;
-        document.getElementById('route-location').textContent = route.location.name;
+
+        // Display location name or coordinates
+        let locationDisplay = 'Unknown location';
+        if (route.location) {
+            if (route.location.name) {
+                locationDisplay = route.location.name;
+            } else if (route.location.lat && route.location.lng) {
+                locationDisplay = `${route.location.lat.toFixed(4)}, ${route.location.lng.toFixed(4)}`;
+            }
+        }
+        document.getElementById('route-location').textContent = locationDisplay;
 
         // Update page title
         document.title = `${route.name} - Route Matcher`;
