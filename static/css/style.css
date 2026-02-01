@@ -748,3 +748,82 @@ input[type="text"]::placeholder {
         font-size: 2rem;
     }
 }
+
+.top-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: #0f1419;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 100;
+}
+
+.nav-content {
+    height: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* This pushes items to opposite sides */
+}
+
+.nav-back {
+    color: #e2e8f0;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 8px 0;
+}
+
+.nav-back:hover {
+    color: #94a3b8;
+}
+
+.nav-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.2s;
+}
+
+.nav-btn:hover {
+    background: #2563eb;
+}
+
+/* Update the route-detail to account for fixed nav */
+.route-detail {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    height: calc(100vh - 60px); /* Subtract nav height */
+    margin-top: 60px; /* Push content down below fixed nav */
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .nav-content {
+        padding: 0 16px;
+    }
+    
+    .nav-back {
+        font-size: 14px;
+    }
+    
+    .nav-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+    
+    .route-detail {
+        margin-top: 60px;
+        height: calc(100vh - 60px);
+    }
+}

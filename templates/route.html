@@ -4,25 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ route_name }} - Route Matcher</title>
+    
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MapLibre CSS -->
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css">
+    
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/route.css') }}">
+    
+    <!-- MapLibre JS -->
     <script src="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.js"></script>
 </head>
+
 <body class="route-page">
     <!-- Navigation -->
     <nav class="top-nav">
-        <div class="nav-content">
-            <a href="/" class="nav-back">← Back to Community</a>
-            <a href="/new" class="btn-primary nav-btn">+ Create New Route</a>
-        </div>
+    <div class="nav-content">
+        <a href="/" class="nav-back">← Community</a>
+        <a href="/new" class="btn-primary nav-btn">+ New Route</a>
+    </div>
     </nav>
 
     <!-- Main Content -->
     <main class="route-detail">
+        <!-- Route Info Panel -->
         <div class="route-info-panel">
             <h1 id="route-name">Loading...</h1>
 
@@ -48,11 +58,13 @@
             </div>
         </div>
 
+        <!-- Map Container -->
         <div class="route-map-container">
             <div id="route-map"></div>
         </div>
     </main>
 
+    <!-- Scripts -->
     <script>
         const routeId = "{{ route_id }}";
     </script>
