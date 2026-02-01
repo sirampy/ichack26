@@ -13,8 +13,8 @@
 }
 
 .route-info-panel {
-    background: #1e293b;
-    border-right: 2px solid #334155;
+    background: #0f1419;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
     padding: 40px;
     overflow-y: auto;
     display: flex;
@@ -24,7 +24,9 @@
 
 .route-info-panel h1 {
     font-size: 2rem;
-    color: #e2e8f0;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: -0.025em;
     margin: 0;
 }
 
@@ -39,9 +41,9 @@
     align-items: center;
     gap: 15px;
     padding: 15px;
-    background: #0f172a;
+    background: #0a0e1a;
     border-radius: 10px;
-    border: 2px solid #334155;
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .stat-icon {

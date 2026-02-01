@@ -5,11 +5,13 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: #0f172a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: #0a0e1a;
     color: #e2e8f0;
     overflow: hidden;
     height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Builder Navigation */
@@ -19,14 +21,14 @@ body {
     left: 0;
     right: 0;
     height: 60px;
-    background: rgba(15, 23, 42, 0.95);
-    backdrop-filter: blur(10px);
+    background: rgba(10, 14, 26, 0.8);
+    backdrop-filter: blur(20px) saturate(180%);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 40px;
     z-index: 999;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .nav-back {
@@ -97,10 +99,10 @@ body {
 }
 
 .progress-step.active .step-circle {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-color: #667eea;
+    background: #4f46e5;
+    border-color: #4f46e5;
     color: white;
-    box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
 .progress-step.completed .step-circle {
@@ -154,10 +156,9 @@ body {
 
 .panel-content h1 {
     font-size: 2.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #f8fafc;
+    font-weight: 700;
+    letter-spacing: -0.025em;
     margin-bottom: 10px;
 }
 
@@ -198,9 +199,9 @@ body {
 
 .canvas-container {
     flex: 1;
-    background: #1e293b;
-    border-radius: 16px;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
     display: flex;
     align-items: center;
@@ -225,9 +226,9 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #1e293b;
-    border-radius: 16px;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
     min-height: 400px;
 }
@@ -268,8 +269,8 @@ body {
 }
 
 .distance-selector {
-    background: #1e293b;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     padding: 20px;
 }
@@ -297,19 +298,19 @@ body {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #4f46e5;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
 #distance-slider::-moz-range-thumb {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #4f46e5;
     cursor: pointer;
     border: none;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
 }
 
 .distance-display {
@@ -321,10 +322,8 @@ body {
 }
 
 #distance-value {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #4f46e5;
+    font-weight: 700;
 }
 
 .distance-presets {
@@ -394,14 +393,15 @@ input[type="text"]::placeholder {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #4f46e5;
     color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 .btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    background: #4338ca;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
@@ -440,9 +440,9 @@ input[type="text"]::placeholder {
 }
 
 .map-container {
-    background: #1e293b;
-    border-radius: 16px;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
     position: relative;
 }
@@ -454,9 +454,9 @@ input[type="text"]::placeholder {
 }
 
 .routes-sidebar {
-    background: #1e293b;
-    border-radius: 16px;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 25px;
     overflow-y: auto;
     display: flex;
@@ -475,22 +475,23 @@ input[type="text"]::placeholder {
 }
 
 .route-item {
-    background: #0f172a;
-    border: 2px solid #334155;
-    border-radius: 12px;
+    background: #0a0e1a;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
     padding: 15px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .route-item:hover {
-    border-color: #667eea;
-    transform: translateX(5px);
+    border-color: rgba(79, 70, 229, 0.5);
+    transform: translateX(3px);
+    background: rgba(79, 70, 229, 0.05);
 }
 
 .route-item.selected {
-    border-color: #667eea;
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    border-color: #4f46e5;
+    background: rgba(79, 70, 229, 0.1);
 }
 
 .route-item-header {
@@ -536,9 +537,9 @@ input[type="text"]::placeholder {
 }
 
 .route-preview, .export-options {
-    background: #1e293b;
-    border-radius: 16px;
-    border: 2px solid #334155;
+    background: #0f1419;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 30px;
     display: flex;
     flex-direction: column;
@@ -719,16 +720,16 @@ input[type="text"]::placeholder {
 .location-marker {
     width: 30px;
     height: 30px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #4f46e5;
     border-radius: 50%;
     border: 3px solid white;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     cursor: pointer;
-    transition: transform 0.2s ease;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .location-marker:hover {
-    transform: scale(1.2);
+    transform: scale(1.15);
 }
 
 /* Responsive */
