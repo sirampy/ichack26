@@ -394,27 +394,11 @@ def transform_user_shape_to_geo(canvas_shape: List[Dict], start_lat: float,
     # Extract x, y coordinates
     points = [(p['x'], p['y']) for p in canvas_shape]
 
-    # Detect if path is nearly straight
-    straightness = calculate_straightness(points)
+    # Use all points from the drawn shape (no downsampling)
+    # OSRM Route API can handle hundreds of waypoints
+    sampled_points = points
 
-    # For straight paths, use fewer waypoints to avoid zigzagging
-    # For complex shapes, use more waypoints for better matching
-    if straightness < 0.05:
-        # Nearly perfect straight line - just start and end
-        num_waypoints = 3
-        print(f"  Detected very straight path (straightness={straightness:.3f}), using {num_waypoints} waypoints")
-    elif straightness < 0.15:
-        # Somewhat straight - use minimal waypoints
-        num_waypoints = 5
-        print(f"  Detected straight path (straightness={straightness:.3f}), using {num_waypoints} waypoints")
-    else:
-        # Complex shape - use more waypoints for accurate matching
-        num_waypoints = min(20, max(12, len(points) // 8))
-        print(f"  Complex shape (straightness={straightness:.3f}), using {num_waypoints} waypoints")
-
-    sampled_points = sample_shape_evenly(points, num_waypoints)
-
-    print(f"  Shape transform: {len(points)} raw points → {len(sampled_points)} waypoints")
+    print(f"  Shape transform: {len(points)} raw points (no downsampling)")
 
     # Calculate perimeter of sampled shape
     drawn_perimeter = sum(
@@ -432,14 +416,14 @@ def transform_user_shape_to_geo(canvas_shape: List[Dict], start_lat: float,
 
     print(f"  Drawn perimeter: {drawn_perimeter:.1f}px, scale: {scale_meters_per_pixel:.2f} m/px")
 
-    # Center the shape at origin
-    center_x = sum(p[0] for p in sampled_points) / len(sampled_points)
-    center_y = sum(p[1] for p in sampled_points) / len(sampled_points)
-    centered = [(x - center_x, y - center_y) for x, y in sampled_points]
+    # Use the first point as the origin (route starts at the location)
+    first_x = sampled_points[0][0]
+    first_y = sampled_points[0][1]
+    offset_from_first = [(x - first_x, y - first_y) for x, y in sampled_points]
 
     # Convert to lat/lng offsets
     geo_points = []
-    for x, y in centered:
+    for x, y in offset_from_first:
         # Canvas: y increases downward, but we want north to be up
         # So flip y axis
         y_flipped = -y

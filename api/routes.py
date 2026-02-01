@@ -86,15 +86,8 @@ def match_routes():
 
         print(f"Generated reference shape with {len(reference_shape)} waypoints")
 
-        # OSRM can handle many more waypoints than GraphHopper's free tier
-        # Sample to reasonable number for performance (OSRM recommends < 100 for match)
-        max_waypoints = 50
-        if len(reference_shape) > max_waypoints:
-            indices = [int(i * (len(reference_shape) - 1) / (max_waypoints - 1)) for i in range(max_waypoints)]
-            sampled_shape = [reference_shape[i] for i in indices]
-            print(f"Sampled {len(sampled_shape)} waypoints from {len(reference_shape)} points")
-        else:
-            sampled_shape = reference_shape
+        # Use all waypoints (no downsampling)
+        sampled_shape = reference_shape
 
         # Convert to OSRM format: lng,lat;lng,lat;...
         # OSRM uses semicolon-separated coordinate pairs
