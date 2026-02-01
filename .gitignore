@@ -12,3 +12,4 @@ build/
 .env
 .venv
 data/routes.db
+osrm-data/

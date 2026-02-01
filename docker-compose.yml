@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  osrm-backend:
+    image: osrm/osrm-backend:latest
+    container_name: osrm-backend
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./osrm-data:/data
+    command: >
+      bash -c "
+      if [ ! -f /data/map.osrm ]; then
+        echo 'Map data not processed yet. Please run ./setup-osrm.sh first';
+        exit 1;
+      fi;
+      osrm-routed --algorithm mld /data/map.osrm
+      "
+    restart: unless-stopped

@@ -10,8 +10,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'routes.db')
 db = RouteDB(DB_PATH)
 route_generator = RouteGenerator(DB_PATH)
 
-# GraphHopper API configuration
-GRAPHHOPPER_KEY = '2b7e595c-0bab-4b84-93ba-7ace57677174'  # Set this in your environment
+# OSRM API configuration
+OSRM_BASE_URL = os.getenv('OSRM_BASE_URL', 'http://localhost:5050')
 
 
 @api_bp.route('/health')
@@ -33,7 +33,7 @@ def db_stats():
 @api_bp.route('/match-routes', methods=['POST'])
 def match_routes():
     """
-    Match routes based on drawn shape and location using GraphHopper Map Matching API.
+    Match routes based on drawn shape and location using OSRM Map Matching API.
 
     Expected request body:
     {
@@ -58,16 +58,10 @@ def match_routes():
         target_distance_m = desired_distance_miles * 1609.34
 
         print(f"\n{'='*60}")
-        print(f"ROUTE MATCHING REQUEST (GraphHopper API)")
+        print(f"ROUTE GENERATION REQUEST (OSRM Route API)")
         print(f"Location: ({location['lat']:.4f}, {location['lng']:.4f})")
         print(f"Desired distance: {desired_distance_miles:.1f} miles ({target_distance_m:.0f}m)")
         print(f"{'='*60}\n")
-
-        # Check if GraphHopper key is configured
-        if not GRAPHHOPPER_KEY:
-            return jsonify({
-                'error': 'GraphHopper API key not configured. Set GRAPHHOPPER_KEY environment variable.'
-            }), 500
 
         # Transform user's drawn shape to geographic coordinates
         if shape and len(shape) >= 3:
@@ -92,43 +86,38 @@ def match_routes():
 
         print(f"Generated reference shape with {len(reference_shape)} waypoints")
 
-        # Convert to GraphHopper Routing API format: [longitude, latitude]
-        # Note: GraphHopper POST uses [lng, lat] order, not [lat, lng]
-        # Free tier allows max 5 waypoints, so sample if we have more
-        max_waypoints = 5
+        # OSRM can handle many more waypoints than GraphHopper's free tier
+        # Sample to reasonable number for performance (OSRM recommends < 100 for match)
+        max_waypoints = 50
         if len(reference_shape) > max_waypoints:
-            # Sample evenly spaced points from the reference shape
             indices = [int(i * (len(reference_shape) - 1) / (max_waypoints - 1)) for i in range(max_waypoints)]
             sampled_shape = [reference_shape[i] for i in indices]
-            gps_points = [[lng, lat] for lat, lng in sampled_shape]
-            print(f"Sampled {len(gps_points)} waypoints from {len(reference_shape)} points (free tier limit)")
+            print(f"Sampled {len(sampled_shape)} waypoints from {len(reference_shape)} points")
         else:
-            gps_points = [[lng, lat] for lat, lng in reference_shape]
+            sampled_shape = reference_shape
 
-        # Call GraphHopper Routing API (works with free tier, unlike Map Matching)
-        url = "https://graphhopper.com/api/1/route"
+        # Convert to OSRM format: lng,lat;lng,lat;...
+        # OSRM uses semicolon-separated coordinate pairs
+        coordinates_str = ';'.join([f"{lng},{lat}" for lat, lng in sampled_shape])
 
-        payload = {
-            "points": gps_points,
-            "profile": "foot",
-            "locale": "en",
-            "points_encoded": False,
-            "instructions": False
-        }
+        # Call OSRM Route API (not Match API)
+        # Route API finds the best route through waypoints, preserving the shape better
+        url = f"{OSRM_BASE_URL}/route/v1/foot/{coordinates_str}"
 
         params = {
-            "key": GRAPHHOPPER_KEY
+            'overview': 'full',  # Get full route geometry
+            'geometries': 'geojson',  # Use GeoJSON format for coordinates
+            'steps': 'false',  # We don't need turn-by-turn instructions
+            'continue_straight': 'false',  # Allow turns at waypoints
         }
 
-        headers = {
-            "Content-Type": "application/json"
-        }
+        print(f"Calling OSRM Route API with {len(sampled_shape)} waypoints...")
+        print(f"URL: {url}")
 
-        print(f"Calling GraphHopper Routing API with {len(gps_points)} waypoints...")
-        response = http_requests.post(url, json=payload, params=params, headers=headers, timeout=30)
+        response = http_requests.get(url, params=params, timeout=30)
 
         if response.status_code != 200:
-            error_msg = f"GraphHopper API error: {response.status_code}"
+            error_msg = f"OSRM API error: {response.status_code}"
             try:
                 error_data = response.json()
                 error_msg += f" - {error_data.get('message', 'Unknown error')}"
@@ -137,63 +126,75 @@ def match_routes():
             print(f"ERROR: {error_msg}")
             return jsonify({'error': error_msg}), 500
 
-        gh_data = response.json()
+        osrm_data = response.json()
 
         # Check if we got a valid response
-        if 'paths' not in gh_data or len(gh_data['paths']) == 0:
-            print("No paths returned from GraphHopper")
+        if osrm_data.get('code') != 'Ok':
+            error_msg = osrm_data.get('message', 'Route generation failed')
+            print(f"OSRM returned error: {error_msg}")
             return jsonify({
                 'routes': [],
                 'count': 0,
-                'message': 'Could not match route to roads. Try a different location or shape.'
+                'message': f'Could not generate route: {error_msg}'
             })
 
-        # Extract the matched route
-        path = gh_data['paths'][0]
-        distance_m = path['distance']
-        duration_ms = path['time']
+        if 'routes' not in osrm_data or len(osrm_data['routes']) == 0:
+            print("No routes returned from OSRM")
+            return jsonify({
+                'routes': [],
+                'count': 0,
+                'message': 'Could not generate route. Try a different location or shape.'
+            })
 
-        # Get coordinates from the path
-        if 'points' in path:
-            coordinates = path['points']['coordinates']
-            # GraphHopper returns [lng, lat] format
+        # Extract the route (first route)
+        route = osrm_data['routes'][0]
+        distance_m = route['distance']
+        duration_s = route['duration']
+
+        # Get coordinates from the geometry
+        if 'geometry' in route and 'coordinates' in route['geometry']:
+            coordinates = route['geometry']['coordinates']
+            # OSRM GeoJSON format is [lng, lat]
             route_coords = [
                 {'lat': lat, 'lng': lng}
                 for lng, lat in coordinates
             ]
         else:
-            print("No coordinates in GraphHopper response")
+            print("No geometry in OSRM response")
             return jsonify({
                 'routes': [],
                 'count': 0,
-                'message': 'Route matching failed. Please try again.'
+                'message': 'Route generation failed. Please try again.'
             })
 
-        print(f"✓ Successfully matched route: {distance_m:.0f}m, {len(route_coords)} points")
+        print(f"✓ Successfully generated route: {distance_m:.0f}m, {len(route_coords)} points")
 
         formatted_route = {
-            'id': 'graphhopper_matched',
-            'name': 'Your Matched Route',
+            'id': 'osrm_route',
+            'name': 'Your Generated Route',
             'distance': round(distance_m / 1609.34, 2),  # meters to miles
-            'duration': int(duration_ms / 60000),  # milliseconds to minutes
-            'match_score': 95,
+            'duration': int(duration_s / 60),  # seconds to minutes
+            'match_score': 100,  # Route API always finds a valid route
             'elevation_gain': 0,
             'coordinates': route_coords,
-            'type': 'graphhopper'
+            'type': 'osrm'
         }
 
         return jsonify({
             'routes': [formatted_route],
             'count': 1,
-            'source': 'graphhopper',
+            'source': 'osrm',
             'search_params': {
                 'target_distance_miles': desired_distance_miles
             }
         })
 
     except http_requests.exceptions.Timeout:
-        print("ERROR: GraphHopper API request timed out")
+        print("ERROR: OSRM API request timed out")
         return jsonify({'error': 'Request timed out. Please try again.'}), 504
+    except http_requests.exceptions.ConnectionError:
+        print("ERROR: Could not connect to OSRM server")
+        return jsonify({'error': 'OSRM server is not running. Please start it with: docker-compose up -d'}), 503
     except Exception as e:
         print(f"Error matching route: {e}")
         import traceback
