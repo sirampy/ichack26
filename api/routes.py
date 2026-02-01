@@ -1,14 +1,17 @@
 from flask import jsonify, request
 from . import api_bp
 from .db import RouteDB
-from .route_generator import RouteGenerator
+from .route_generator import RouteGenerator, transform_user_shape_to_geo, generate_reference_circle
 import os
-import threading
+import requests as http_requests
 
 # Initialize database connection
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'routes.db')
 db = RouteDB(DB_PATH)
 route_generator = RouteGenerator(DB_PATH)
+
+# GraphHopper API configuration
+GRAPHHOPPER_KEY = '2b7e595c-0bab-4b84-93ba-7ace57677174'  # Set this in your environment
 
 
 @api_bp.route('/health')
@@ -30,13 +33,13 @@ def db_stats():
 @api_bp.route('/match-routes', methods=['POST'])
 def match_routes():
     """
-    Match routes based on drawn shape and location.
-    POC: Returns real routes from database near the location.
+    Match routes based on drawn shape and location using GraphHopper Map Matching API.
 
     Expected request body:
     {
         "location": {"lat": 51.5074, "lng": -0.1278},
-        "shape": [{"x": 100, "y": 150}, {"x": 120, "y": 180}, ...]
+        "shape": [{"x": 100, "y": 150}, {"x": 120, "y": 180}, ...],
+        "desired_distance_miles": 3.0
     }
 
     Returns list of matching routes with coordinates.
@@ -54,20 +57,20 @@ def match_routes():
         # Convert desired distance to meters
         target_distance_m = desired_distance_miles * 1609.34
 
-        import sys
-        sys.stdout.flush()
-        sys.stderr.flush()
-        print(f"\n{'='*60}", flush=True)
-        print(f"ROUTE MATCHING REQUEST", flush=True)
-        print(f"Location: ({location['lat']:.4f}, {location['lng']:.4f})", flush=True)
-        print(f"Desired distance: {desired_distance_miles:.1f} miles ({target_distance_m:.0f}m)", flush=True)
-        print(f"{'='*60}\n", flush=True)
+        print(f"\n{'='*60}")
+        print(f"ROUTE MATCHING REQUEST (GraphHopper API)")
+        print(f"Location: ({location['lat']:.4f}, {location['lng']:.4f})")
+        print(f"Desired distance: {desired_distance_miles:.1f} miles ({target_distance_m:.0f}m)")
+        print(f"{'='*60}\n")
 
-        # Generate reference shape for matching
-        from .route_generator import generate_reference_circle, transform_user_shape_to_geo
+        # Check if GraphHopper key is configured
+        if not GRAPHHOPPER_KEY:
+            return jsonify({
+                'error': 'GraphHopper API key not configured. Set GRAPHHOPPER_KEY environment variable.'
+            }), 500
 
+        # Transform user's drawn shape to geographic coordinates
         if shape and len(shape) >= 3:
-            # User drew a shape - use it!
             print(f"Using user-drawn shape with {len(shape)} points")
             try:
                 reference_shape = transform_user_shape_to_geo(
@@ -81,101 +84,118 @@ def match_routes():
                     location['lat'], location['lng'], radius_m, num_points=36
                 )
         else:
-            # No shape or insufficient points - use circular shape
             print("No user shape provided, using circular shape")
             radius_m = target_distance_m / (2 * 3.14159 * 1.7)
             reference_shape = generate_reference_circle(
                 location['lat'], location['lng'], radius_m, num_points=36
             )
-            print(f"Generated reference circular shape with radius {radius_m:.0f}m")
 
-        # Generate routes using shape matching
-        print("Attempting to generate shape-matched routes...")
-        generated_routes = []
+        print(f"Generated reference shape with {len(reference_shape)} waypoints")
 
-        # Try to generate 2 routes with slightly different parameters
-        for attempt in range(2):
+        # Convert to GraphHopper Routing API format: [longitude, latitude]
+        # Note: GraphHopper POST uses [lng, lat] order, not [lat, lng]
+        # Free tier allows max 5 waypoints, so sample if we have more
+        max_waypoints = 5
+        if len(reference_shape) > max_waypoints:
+            # Sample evenly spaced points from the reference shape
+            indices = [int(i * (len(reference_shape) - 1) / (max_waypoints - 1)) for i in range(max_waypoints)]
+            sampled_shape = [reference_shape[i] for i in indices]
+            gps_points = [[lng, lat] for lat, lng in sampled_shape]
+            print(f"Sampled {len(gps_points)} waypoints from {len(reference_shape)} points (free tier limit)")
+        else:
+            gps_points = [[lng, lat] for lat, lng in reference_shape]
+
+        # Call GraphHopper Routing API (works with free tier, unlike Map Matching)
+        url = "https://graphhopper.com/api/1/route"
+
+        payload = {
+            "points": gps_points,
+            "profile": "foot",
+            "locale": "en",
+            "points_encoded": False,
+            "instructions": False
+        }
+
+        params = {
+            "key": GRAPHHOPPER_KEY
+        }
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        print(f"Calling GraphHopper Routing API with {len(gps_points)} waypoints...")
+        response = http_requests.post(url, json=payload, params=params, headers=headers, timeout=30)
+
+        if response.status_code != 200:
+            error_msg = f"GraphHopper API error: {response.status_code}"
             try:
-                # Vary distance slightly for each attempt to get different routes
-                distance_variation = target_distance_m * (1.0 + (attempt - 0.5) * 0.1)
+                error_data = response.json()
+                error_msg += f" - {error_data.get('message', 'Unknown error')}"
+            except:
+                error_msg += f" - {response.text[:200]}"
+            print(f"ERROR: {error_msg}")
+            return jsonify({'error': error_msg}), 500
 
-                route = route_generator.generate_shape_matched_loop(
-                    start_lat=location['lat'],
-                    start_lng=location['lng'],
-                    target_shape=reference_shape,
-                    target_distance_m=distance_variation,
-                    tolerance=0.7
-                )
+        gh_data = response.json()
 
-                if route:
-                    route['attempt'] = attempt
-                    generated_routes.append(route)
-                    print(f"  ✓ Generated route {len(generated_routes)}: {route['distance_meters']:.0f}m")
-
-                    if len(generated_routes) >= 2:
-                        break
-            except Exception as e:
-                print(f"  ✗ Route generation attempt {attempt + 1} failed: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-
-        db_routes = []
-
-        # Format routes for frontend
-        formatted_routes = []
-
-        # Format generated routes
-        for i, route in enumerate(generated_routes):
-            formatted_routes.append({
-                'id': f"generated_{i}",
-                'name': f"Generated Loop {i+1}",
-                'distance': round(route['distance_meters'] / 1609.34, 2),
-                'duration': int(route['distance_meters'] / 1609.34 * 10),
-                'match_score': 90 - (i * 5),  # TODO: Real shape matching
-                'elevation_gain': 0,
-                'coordinates': route['coordinates'],
-                'type': 'generated'
-            })
-
-        # Format database segment routes (if any)
-        for i, route in enumerate(db_routes):
-            # Parse WKT geometry
-            coords = db.parse_wkt_linestring(route['geometry_wkt'])
-
-            # Convert to frontend format
-            formatted_routes.append({
-                'id': f"osm_{route['osm_id']}",
-                'name': route['name'],
-                'distance': round(route['length_meters'] / 1609.34, 2),  # meters to miles
-                'duration': int(route['length_meters'] / 1609.34 * 10),  # ~10 min/mile
-                'match_score': 85 - (i * 3),  # POC: Fake scores, descending
-                'elevation_gain': 0,
-                'coordinates': [
-                    {'lat': lat, 'lng': lng}
-                    for lat, lng in coords
-                ],
-                'type': 'segment'
-            })
-
-        if not formatted_routes:
+        # Check if we got a valid response
+        if 'paths' not in gh_data or len(gh_data['paths']) == 0:
+            print("No paths returned from GraphHopper")
             return jsonify({
                 'routes': [],
                 'count': 0,
-                'message': 'No routes found near this location'
+                'message': 'Could not match route to roads. Try a different location or shape.'
             })
 
+        # Extract the matched route
+        path = gh_data['paths'][0]
+        distance_m = path['distance']
+        duration_ms = path['time']
+
+        # Get coordinates from the path
+        if 'points' in path:
+            coordinates = path['points']['coordinates']
+            # GraphHopper returns [lng, lat] format
+            route_coords = [
+                {'lat': lat, 'lng': lng}
+                for lng, lat in coordinates
+            ]
+        else:
+            print("No coordinates in GraphHopper response")
+            return jsonify({
+                'routes': [],
+                'count': 0,
+                'message': 'Route matching failed. Please try again.'
+            })
+
+        print(f"✓ Successfully matched route: {distance_m:.0f}m, {len(route_coords)} points")
+
+        formatted_route = {
+            'id': 'graphhopper_matched',
+            'name': 'Your Matched Route',
+            'distance': round(distance_m / 1609.34, 2),  # meters to miles
+            'duration': int(duration_ms / 60000),  # milliseconds to minutes
+            'match_score': 95,
+            'elevation_gain': 0,
+            'coordinates': route_coords,
+            'type': 'graphhopper'
+        }
+
         return jsonify({
-            'routes': formatted_routes,
-            'count': len(formatted_routes),
-            'source': 'generated' if generated_routes else 'database',
+            'routes': [formatted_route],
+            'count': 1,
+            'source': 'graphhopper',
             'search_params': {
                 'target_distance_miles': desired_distance_miles
             }
         })
 
+    except http_requests.exceptions.Timeout:
+        print("ERROR: GraphHopper API request timed out")
+        return jsonify({'error': 'Request timed out. Please try again.'}), 504
     except Exception as e:
-        print(f"Error querying routes: {e}")
+        print(f"Error matching route: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
