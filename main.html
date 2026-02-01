@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Runner doodle</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    .main_container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .main_panel {
+      flex: 1;
+      border: 4px solid #256639;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Map must have an explicit height */
+    #map_in {
+      width: 100%;
+      height: 100%;
+    }
+    #map_out {
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas {
+      /*border: 1px solid #ccc;*/
+      touch-action: none; /* important for mobile */
+      width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+  </style>
+  </style>
+</head>
+<body>
+
+<div class="main_container">
+  <div class="main_panel">
+    <div id="map_in"></div>
+  </div>
+  <div class="main_panel">
+    <canvas id="sketchpad" width="512" height="512"></canvas>
+    <br />
+    <button id="clearBtn">Clear</button>
+  </div>
+  <div class="main_panel">
+    <div id="map_out"></div>
+    <br />
+    <button id="searchBtn">Search</button>
+  </div>
+</div>
+
+<h3>Captured Points</h3>
+<div id="pointsOutput"></div>
+
+<button id="testBtn">test</button>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/osmtogeojson.js"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/osmtogeojson@3.0.0/dist/osmtogeojson.min.js"></script> -->
+
+<script>
+  // Create map
+  const map_in = L.map('map_in').setView([51.505, -0.09], 13);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map_in);
+
+  // Create map
+  const map_out = L.map('map_out').setView([51.505, -0.09], 13);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map_out);
+
+  document.getElementById('searchBtn').addEventListener('click', () => {
+    // Get center and zoom from first map
+    const center = map_in.getCenter(); // returns LatLng object
+    const zoom = map_in.getZoom();
+
+    // Apply to second map
+    map_out.setView(center, zoom);
+  });
+
+
+
+  document.getElementById('testBtn').addEventListener('click', () => {
+    const bounds = map_in.getBounds();
+
+    const sw = bounds.getSouthWest(); // southwest corner
+    const ne = bounds.getNorthEast(); // northeast corner
+    const bbox = [sw.lat, sw.lng, ne.lat, ne.lng];
+
+    console.log(bbox);
+
+    const overpassQuery = `
+    [out:json][timeout:25];
+
+    // Pedestrian-specific paths
+    (
+      way["highway"~"footway|pedestrian|path|steps|track|bridleway|living_street"]
+          (${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+      // Vehicle roads that allow pedestrians
+      way["highway"~"residential|tertiary|secondary|primary|unclassified"]["foot"!~"no"]
+          (${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+    );
+
+    out geom;
+    `;
+
+    fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: overpassQuery
+    })
+    .then(res => res.json())
+    .then(osmData => {
+      const geojson = osmtogeojson(osmData);
+
+      console.log(geojson)
+
+      L.geoJSON(geojson, {
+        style: {
+          color: 'red',
+          weight: 3
+        }
+      }).addTo(map_in);
+    });
+    }
+  )
+
+
+</script>
+
+<script src="canvas.js"></script>
+
+</body>
+</html>
