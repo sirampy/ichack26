@@ -1,9 +1,13 @@
-from flask import jsonify, request
+from flask import jsonify, request, Response
 from . import api_bp
 from .db import RouteDB
 from .route_generator import RouteGenerator, transform_user_shape_to_geo, generate_reference_circle
+from .image_processing import image_to_line
+from .gpx_generator import generate_gpx
 import os
 import requests as http_requests
+import uuid
+from datetime import datetime
 
 # Initialize database connection
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'routes.db')
@@ -12,6 +16,9 @@ route_generator = RouteGenerator(DB_PATH)
 
 # OSRM API configuration
 OSRM_BASE_URL = os.getenv('OSRM_BASE_URL', 'http://localhost:5050')
+
+# In-memory route storage
+PUBLISHED_ROUTES = {}
 
 
 @api_bp.route('/health')
@@ -207,3 +214,205 @@ def estimate_shape_length(shape):
         total += (dx**2 + dy**2)**0.5
 
     return total
+
+
+@api_bp.route('/image-to-line', methods=['POST'])
+def image_to_line_endpoint():
+    """
+    Convert uploaded image to line points.
+
+    Expected: multipart/form-data with 'image' file
+    Optional: 'num_points' (default 500)
+
+    Returns: {'points': [{'x': x, 'y': y}, ...], 'image_size': [width, height]}
+    """
+    try:
+        # Check if image file was uploaded
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Get num_points parameter
+        num_points = int(request.form.get('num_points', 500))
+        num_points = max(100, min(2000, num_points))  # Clamp between 100-2000
+
+        print(f"\n{'='*60}")
+        print(f"IMAGE TO LINE CONVERSION")
+        print(f"Filename: {file.filename}")
+        print(f"Points to extract: {num_points}")
+        print(f"{'='*60}\n")
+
+        # Read image bytes
+        image_bytes = file.read()
+
+        # Convert image to line
+        print(f"Processing image...")
+        points, img_shape = image_to_line(image_bytes, num_points)
+
+        print(f"✓ Generated {len(points)} points from image")
+        print(f"  Image size: {img_shape[1]}x{img_shape[0]}")
+
+        return jsonify({
+            'points': points,
+            'image_size': [img_shape[1], img_shape[0]],  # [width, height]
+            'num_points': len(points)
+        })
+
+    except Exception as e:
+        print(f"Error processing image: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/export-gpx', methods=['POST'])
+def export_gpx():
+    """
+    Generate and download GPX file from route data.
+
+    Expected request body:
+    {
+        "route": {...},  # Route object with coordinates
+        "location": {"lat": 51.5074, "lng": -0.1278}
+    }
+
+    Returns: GPX file download
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'route' not in data:
+            return jsonify({'error': 'No route data provided'}), 400
+
+        route = data['route']
+        location = data.get('location', {'lat': 0, 'lng': 0})
+
+        print(f"\n{'='*60}")
+        print(f"GPX EXPORT REQUEST")
+        print(f"Route: {route.get('name', 'Unknown')}")
+        print(f"Distance: {route.get('distance', 0)} miles")
+        print(f"Points: {len(route.get('coordinates', []))}")
+        print(f"{'='*60}\n")
+
+        # Generate GPX
+        gpx_content = generate_gpx(route, location)
+
+        # Create filename
+        route_name = route.get('name', 'route').replace(' ', '_').lower()
+        distance = route.get('distance', 0)
+        filename = f"{route_name}_{distance}mi.gpx"
+
+        print(f"✓ Generated GPX file: {filename}")
+
+        # Return as downloadable file
+        return Response(
+            gpx_content,
+            mimetype='application/gpx+xml',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}'
+            }
+        )
+
+    except Exception as e:
+        print(f"Error generating GPX: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/publish-route', methods=['POST'])
+def publish_route():
+    """
+    Publish a route to the community.
+
+    Expected request body:
+    {
+        "name": "Route Name",
+        "distance": 3.2,
+        "duration": 32,
+        "coordinates": [...],
+        "location": {"lat": 51.5074, "lng": -0.1278},
+        "elevation_gain": 45
+    }
+
+    Returns: {"id": "route_id", "url": "/route/route_id"}
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'coordinates' not in data:
+            return jsonify({'error': 'Missing route data'}), 400
+
+        # Generate unique ID
+        route_id = str(uuid.uuid4())[:8]
+
+        # Store route
+        PUBLISHED_ROUTES[route_id] = {
+            'id': route_id,
+            'name': data.get('name', 'Unnamed Route'),
+            'distance': data.get('distance', 0),
+            'duration': data.get('duration', 0),
+            'coordinates': data['coordinates'],
+            'location': data.get('location', {}),
+            'elevation_gain': data.get('elevation_gain', 0),
+            'created_at': datetime.utcnow().isoformat(),
+            'author': 'anonymous'
+        }
+
+        print(f"✓ Published route: {route_id} - {PUBLISHED_ROUTES[route_id]['name']}")
+
+        return jsonify({
+            'id': route_id,
+            'url': f'/route/{route_id}'
+        })
+
+    except Exception as e:
+        print(f"Error publishing route: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/routes', methods=['GET'])
+def get_routes():
+    """
+    Get all published routes.
+
+    Returns: {"routes": [...], "count": N}
+    """
+    try:
+        routes = list(PUBLISHED_ROUTES.values())
+        # Sort by created_at, newest first
+        routes.sort(key=lambda r: r.get('created_at', ''), reverse=True)
+
+        return jsonify({
+            'routes': routes,
+            'count': len(routes)
+        })
+
+    except Exception as e:
+        print(f"Error getting routes: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/routes/<route_id>', methods=['GET'])
+def get_route(route_id):
+    """
+    Get a specific published route by ID.
+
+    Returns: route object or 404
+    """
+    try:
+        route = PUBLISHED_ROUTES.get(route_id)
+
+        if not route:
+            return jsonify({'error': 'Route not found'}), 404
+
+        return jsonify(route)
+
+    except Exception as e:
+        print(f"Error getting route: {e}")
+        return jsonify({'error': str(e)}), 500

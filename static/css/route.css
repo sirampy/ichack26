@@ -1,0 +1,104 @@
+/* Route detail page styles */
+
+.route-page {
+    overflow: hidden;
+    height: 100vh;
+}
+
+.route-detail {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    height: calc(100vh - 80px);
+    margin-top: 80px;
+}
+
+.route-info-panel {
+    background: #1e293b;
+    border-right: 2px solid #334155;
+    padding: 40px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.route-info-panel h1 {
+    font-size: 2rem;
+    color: #e2e8f0;
+    margin: 0;
+}
+
+.route-stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: #0f172a;
+    border-radius: 10px;
+    border: 2px solid #334155;
+}
+
+.stat-icon {
+    font-size: 1.5rem;
+}
+
+.stat-item > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.stat-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.route-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 2px solid #334155;
+}
+
+.route-actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+}
+
+.route-map-container {
+    position: relative;
+    background: #0f172a;
+}
+
+#route-map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .route-detail {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .route-info-panel {
+        border-right: none;
+        border-bottom: 2px solid #334155;
+        max-height: 40vh;
+    }
+}

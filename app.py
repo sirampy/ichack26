@@ -11,11 +11,21 @@ def create_app():
     from api import api_bp
     app.register_blueprint(api_bp)
 
-    # Frontend route
+    # Frontend routes
     @app.route('/')
     def index():
-        """Serve the frontend"""
+        """Home page showing all published routes"""
         return render_template('index.html')
+
+    @app.route('/new')
+    def new_route():
+        """Route builder page"""
+        return render_template('new.html')
+
+    @app.route('/route/<route_id>')
+    def view_route(route_id):
+        """View a specific published route"""
+        return render_template('route.html', route_id=route_id, route_name='Route')
 
     return app
 

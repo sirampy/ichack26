@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ route_name }} - Route Matcher</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/route.css') }}">
+    <script src="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.js"></script>
+</head>
+<body class="route-page">
+    <!-- Navigation -->
+    <nav class="top-nav">
+        <div class="nav-content">
+            <a href="/" class="nav-back">← Back to Community</a>
+            <a href="/new" class="btn-primary nav-btn">+ Create New Route</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="route-detail">
+        <div class="route-info-panel">
+            <h1 id="route-name">Loading...</h1>
+
+            <div class="route-stats-grid">
+                <div class="stat-item">
+                    <span class="stat-icon">📏</span>
+                    <div>
+                        <span class="stat-label">Distance</span>
+                        <span class="stat-value" id="route-distance">-</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">⏱️</span>
+                    <div>
+                        <span class="stat-label">Duration</span>
+                        <span class="stat-value" id="route-duration">-</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">📈</span>
+                    <div>
+                        <span class="stat-label">Elevation</span>
+                        <span class="stat-value" id="route-elevation">-</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-icon">📍</span>
+                    <div>
+                        <span class="stat-label">Location</span>
+                        <span class="stat-value" id="route-location">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="route-actions">
+                <button class="btn-primary" id="download-gpx-btn">📥 Download GPX</button>
+            </div>
+        </div>
+
+        <div class="route-map-container">
+            <div id="route-map"></div>
+        </div>
+    </main>
+
+    <script>
+        const routeId = "{{ route_id }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/route.js') }}"></script>
+</body>
+</html>

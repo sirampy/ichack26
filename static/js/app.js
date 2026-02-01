@@ -408,6 +408,12 @@ function displayRoutes(routes) {
 
     // Render routes on map
     renderRoutesOnMap();
+
+    // Automatically select the first route
+    if (routes.length > 0) {
+        const firstItem = container.querySelector('.route-item');
+        selectRoute(routes[0], firstItem, 0);
+    }
 }
 
 function selectRoute(route, element, index) {
@@ -609,6 +615,9 @@ function displaySelectedRoute() {
     // Enable download button
     document.getElementById('download-gpx').disabled = false;
 
+    // Enable publish button
+    document.getElementById('publish-route').disabled = false;
+
     // Display route on export map
     if (exportMap.loaded()) {
         renderExportMap();
@@ -753,8 +762,242 @@ document.addEventListener('DOMContentLoaded', () => {
         scrollToPanel(0);
     });
 
-    document.getElementById('download-gpx').addEventListener('click', () => {
-        // TODO: Generate and download GPX file
-        alert('GPX download coming soon!');
+    document.getElementById('download-gpx').addEventListener('click', async () => {
+        if (!state.selectedRoute) {
+            alert('No route selected');
+            return;
+        }
+
+        try {
+            // Call the GPX export endpoint
+            const response = await fetch(`${API_BASE}/export-gpx`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    route: state.selectedRoute,
+                    location: state.location
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.status}`);
+            }
+
+            // Get the filename from the Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'route.gpx';
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+
+            // Download the file
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            console.log('GPX file downloaded:', filename);
+        } catch (error) {
+            console.error('GPX download failed:', error);
+            alert(`Failed to download GPX: ${error.message}`);
+        }
+    });
+
+    // Image upload functionality
+    const imageUploadInput = document.getElementById('image-upload');
+    const uploadImageBtn = document.getElementById('upload-image-btn');
+    const uploadStatus = document.getElementById('upload-status');
+
+    uploadImageBtn.addEventListener('click', () => {
+        imageUploadInput.click();
+    });
+
+    imageUploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Show upload status
+        uploadStatus.textContent = 'Processing image...';
+        uploadImageBtn.disabled = true;
+
+        try {
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('num_points', '800');  // Adjust for detail level
+
+            // Upload image to backend
+            const response = await fetch(`${API_BASE}/image-to-line`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Clear canvas
+            resetDrawing();
+
+            // Draw the converted line on canvas
+            const canvas = document.getElementById('drawing-canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Scale points to fit canvas
+            const [imgWidth, imgHeight] = data.image_size;
+            const scaleX = canvas.width / imgWidth;
+            const scaleY = canvas.height / imgHeight;
+            const scale = Math.min(scaleX, scaleY);
+
+            // Center the image
+            const offsetX = (canvas.width - imgWidth * scale) / 2;
+            const offsetY = (canvas.height - imgHeight * scale) / 2;
+
+            // Draw the line
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+
+            data.points.forEach((point, index) => {
+                const x = point.x * scale + offsetX;
+                const y = point.y * scale + offsetY;
+
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+
+            // Save the points to state
+            state.drawingData = data.points;
+
+            // Mark drawing as completed
+            hasCompletedDrawing = true;
+            currentStroke = data.points;
+
+            // Update status
+            uploadStatus.textContent = `✓ Loaded ${data.num_points} points from image`;
+            uploadStatus.style.color = '#27ae60';
+
+            // Check if we can enable the next button
+            checkDrawingComplete();
+
+        } catch (error) {
+            console.error('Image upload failed:', error);
+            uploadStatus.textContent = `✗ Upload failed: ${error.message}`;
+            uploadStatus.style.color = '#e74c3c';
+        } finally {
+            uploadImageBtn.disabled = false;
+            // Clear the input so the same file can be uploaded again
+            imageUploadInput.value = '';
+        }
+    });
+
+    // Publish route functionality
+    document.getElementById('publish-route').addEventListener('click', async () => {
+        if (!state.selectedRoute) return;
+
+        const publishButton = document.getElementById('publish-route');
+        const publishStatus = document.getElementById('publish-status');
+
+        // Disable button and show loading state
+        publishButton.disabled = true;
+        publishButton.textContent = '⏳ Publishing...';
+        publishStatus.style.display = 'none';
+
+        try {
+            // Prepare route data for publishing
+            const routeData = {
+                name: document.getElementById('route-name').value || 'My Route',
+                distance: state.selectedRoute.distance,
+                duration: state.selectedRoute.duration,
+                coordinates: state.selectedRoute.coordinates,
+                location: state.location,
+                elevation_gain: state.selectedRoute.elevation_gain
+            };
+
+            // Call backend API to publish route
+            const response = await fetch(`${API_BASE}/publish-route`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(routeData)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to publish route');
+            }
+
+            const data = await response.json();
+            const routeId = data.id;
+            const shareLink = `${window.location.origin}/route/${routeId}`;
+
+            // Show the share link section
+            document.getElementById('share-link-section').style.display = 'flex';
+            document.getElementById('share-link').value = shareLink;
+
+            // Show success message
+            publishStatus.textContent = '✓ Route published successfully! Share the link below.';
+            publishStatus.style.display = 'block';
+            publishStatus.style.color = '#10b981';
+
+            // Update button
+            publishButton.textContent = '✓ Published';
+            publishButton.style.background = '#10b981';
+
+            console.log('Route published with ID:', routeId);
+            console.log('Share link:', shareLink);
+
+        } catch (error) {
+            console.error('Failed to publish route:', error);
+            publishStatus.textContent = '✗ Failed to publish route. Please try again.';
+            publishStatus.style.display = 'block';
+            publishStatus.style.color = '#e74c3c';
+
+            publishButton.textContent = '🌐 Publish to Community';
+            publishButton.disabled = false;
+        }
+    });
+
+    document.getElementById('copy-link').addEventListener('click', async () => {
+        const shareLinkInput = document.getElementById('share-link');
+        const copyButton = document.getElementById('copy-link');
+
+        try {
+            // Copy to clipboard
+            await navigator.clipboard.writeText(shareLinkInput.value);
+
+            // Update button to show success
+            const originalText = copyButton.textContent;
+            copyButton.textContent = '✓ Copied!';
+            copyButton.style.backgroundColor = '#27ae60';
+
+            // Reset after 2 seconds
+            setTimeout(() => {
+                copyButton.textContent = originalText;
+                copyButton.style.backgroundColor = '';
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            alert('Failed to copy link. Please copy it manually.');
+        }
     });
 });

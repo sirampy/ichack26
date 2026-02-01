@@ -5,3 +5,5 @@ osmium
 shapely
 numpy
 scipy
+opencv-python
+matplotlib
